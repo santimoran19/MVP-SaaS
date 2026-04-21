@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import { addWeeks, subWeeks, startOfWeek, endOfWeek, format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { toast } from 'sonner'
 import {
   CalendarDays,
   LayoutDashboard,
   Scissors,
-  Users,
   TrendingUp,
   Clock,
   CheckCircle2,
   XCircle,
+  DollarSign,
 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { TarjetaTurno } from '@/components/admin/TarjetaTurno'
 import { CalendarioSemana } from '@/components/admin/CalendarioSemana'
 import { GestionServicios } from '@/components/admin/GestionServicios'
@@ -38,15 +38,25 @@ export function AdminPage() {
   const { turnos: turnosSemana } = useTurnosSemana(inicioSemana, finSemana)
   const { servicios, recargar: recargarServicios } = useServicios(false)
 
-  const turnosPendientes = turnosDia.filter((t) => t.estado === 'pendiente').length
+  // ── KPIs del día ──────────────────────────────────────
+  const turnosPendientes  = turnosDia.filter((t) => t.estado === 'pendiente').length
   const turnosConfirmados = turnosDia.filter((t) => t.estado === 'confirmado').length
-  const turnosCancelados = turnosDia.filter((t) => t.estado === 'cancelado').length
+  const turnosCancelados  = turnosDia.filter((t) => t.estado === 'cancelado').length
+
+  // Facturación estimada: suma los precios de los turnos confirmados del día
+  const facturacionEstimada = turnosDia
+    .filter((t) => t.estado === 'confirmado')
+    .reduce((acc, t) => acc + (t.servicios?.precio ?? 0), 0)
+
+  const handleActualizarTurno = async () => {
+    await recargarDia()
+    toast.success('Turno actualizado')
+  }
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Sidebar desktop / Bottom nav mobile */}
       <div className="flex">
-        {/* Sidebar — visible en desktop */}
+        {/* ── Sidebar desktop ── */}
         <aside className="hidden lg:flex flex-col w-56 min-h-screen border-r border-[var(--color-border)] bg-white p-4 gap-1 fixed">
           <div className="flex items-center gap-2 px-2 py-3 mb-4">
             <div className="h-8 w-8 rounded-lg bg-[var(--color-primary)] flex items-center justify-center">
@@ -71,9 +81,8 @@ export function AdminPage() {
           ))}
         </aside>
 
-        {/* Contenido principal */}
+        {/* ── Contenido principal ── */}
         <main className="flex-1 lg:ml-56 pb-20 lg:pb-0">
-          {/* Header */}
           <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-[var(--color-border)] px-4 lg:px-8 h-14 flex items-center justify-between">
             <h1 className="font-semibold text-[var(--color-foreground)]">
               {VISTAS.find((v) => v.id === vista)?.label}
@@ -92,12 +101,13 @@ export function AdminPage() {
                 pendientes={turnosPendientes}
                 confirmados={turnosConfirmados}
                 cancelados={turnosCancelados}
-                onActualizar={recargarDia}
+                facturacion={facturacionEstimada}
+                onActualizar={handleActualizarTurno}
               />
             )}
             {vista === 'calendario' && (
-              <CalendarioVista
-                turnosSemana={turnosSemana}
+              <CalendarioSemana
+                turnos={turnosSemana}
                 semanaActual={semanaActual}
                 onSemanaAnterior={() => setSemanaActual(subWeeks(semanaActual, 1))}
                 onSemanaSiguiente={() => setSemanaActual(addWeeks(semanaActual, 1))}
@@ -111,7 +121,7 @@ export function AdminPage() {
         </main>
       </div>
 
-      {/* Bottom nav — mobile */}
+      {/* ── Bottom nav mobile ── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[var(--color-border)] flex z-20">
         {VISTAS.map(({ id, label, icon: Icon }) => (
           <button
@@ -131,46 +141,57 @@ export function AdminPage() {
   )
 }
 
-function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, confirmados, cancelados, onActualizar }) {
+// ─────────────────────────────────────────────────────────────
+// Vista Dashboard
+// ─────────────────────────────────────────────────────────────
+function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, confirmados, cancelados, facturacion, onActualizar }) {
   return (
     <div className="space-y-6 max-w-2xl">
       {/* KPIs */}
-      <div className="grid grid-cols-3 gap-3">
-        <KpiCard
-          label="Pendientes"
-          value={pendientes}
-          icon={<Clock className="h-4 w-4 text-blue-500" />}
-          color="text-blue-600"
-        />
-        <KpiCard
-          label="Confirmados"
-          value={confirmados}
-          icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-          color="text-emerald-600"
-        />
-        <KpiCard
-          label="Cancelados"
-          value={cancelados}
-          icon={<XCircle className="h-4 w-4 text-red-400" />}
-          color="text-red-500"
-        />
-      </div>
+      {loading ? (
+        <SkeletonKpis />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard
+            label="Pendientes"
+            value={pendientes}
+            icon={<Clock className="h-4 w-4 text-blue-500" />}
+            valueClass="text-blue-600"
+          />
+          <KpiCard
+            label="Confirmados"
+            value={confirmados}
+            icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+            valueClass="text-emerald-600"
+          />
+          <KpiCard
+            label="Cancelados"
+            value={cancelados}
+            icon={<XCircle className="h-4 w-4 text-red-400" />}
+            valueClass="text-red-500"
+          />
+          <KpiCard
+            label="Facturación est."
+            value={`$${facturacion.toLocaleString('es-AR')}`}
+            icon={<TrendingUp className="h-4 w-4 text-violet-500" />}
+            valueClass="text-violet-600"
+            small
+          />
+        </div>
+      )}
 
       {/* Lista de turnos del día */}
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wide">
-          Turnos de hoy — {format(fechaSeleccionada, "d 'de' MMMM", { locale: es })}
+          Turnos — {format(fechaSeleccionada, "d 'de' MMMM", { locale: es })}
         </h2>
+
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 rounded-xl bg-gray-100 animate-pulse" />
-            ))}
-          </div>
+          <SkeletonTurnos />
         ) : turnosDia.length === 0 ? (
           <div className="text-center py-10 text-[var(--color-muted-foreground)]">
             <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-30" />
-            <p className="text-sm">No hay turnos para hoy</p>
+            <p className="text-sm">No hay turnos para este día</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -184,30 +205,54 @@ function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, con
   )
 }
 
-function CalendarioVista({ turnosSemana, semanaActual, onSemanaAnterior, onSemanaSiguiente, onDiaSeleccionado }) {
+// ─────────────────────────────────────────────────────────────
+// Componentes auxiliares
+// ─────────────────────────────────────────────────────────────
+function KpiCard({ label, value, icon, valueClass, small = false }) {
   return (
-    <div className="space-y-4">
-      <CalendarioSemana
-        turnos={turnosSemana}
-        semanaActual={semanaActual}
-        onSemanaAnterior={onSemanaAnterior}
-        onSemanaSiguiente={onSemanaSiguiente}
-        onDiaSeleccionado={onDiaSeleccionado}
-      />
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-1.5 mb-2">
+          {icon}
+          <span className="text-xs text-[var(--color-muted-foreground)] leading-tight">{label}</span>
+        </div>
+        <span className={cn('font-bold leading-none', small ? 'text-lg' : 'text-2xl', valueClass)}>
+          {value}
+        </span>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SkeletonKpis() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="rounded-xl border border-[var(--color-border)] p-4 space-y-2">
+          <div className="h-3 w-20 rounded bg-gray-100 animate-pulse" />
+          <div className="h-7 w-12 rounded bg-gray-100 animate-pulse" />
+        </div>
+      ))}
     </div>
   )
 }
 
-function KpiCard({ label, value, icon, color }) {
+function SkeletonTurnos() {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-1">
-          {icon}
-          <span className="text-xs text-[var(--color-muted-foreground)]">{label}</span>
+    <div className="space-y-2">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="rounded-xl border border-[var(--color-border)] p-4 flex gap-4">
+          <div className="flex flex-col gap-1">
+            <div className="h-5 w-10 rounded bg-gray-100 animate-pulse" />
+            <div className="h-3 w-6 rounded bg-gray-100 animate-pulse" />
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-32 rounded bg-gray-100 animate-pulse" />
+            <div className="h-3 w-48 rounded bg-gray-100 animate-pulse" />
+            <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
+          </div>
         </div>
-        <span className={cn('text-2xl font-bold', color)}>{value}</span>
-      </CardContent>
-    </Card>
+      ))}
+    </div>
   )
 }
