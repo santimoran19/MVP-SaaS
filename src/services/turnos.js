@@ -6,11 +6,7 @@ export const turnosService = {
     const fechaStr = format(fecha, 'yyyy-MM-dd')
     const { data, error } = await supabase
       .from('turnos')
-      .select(`
-        *,
-        servicios (nombre, duracion_minutos, precio),
-        profesionales (nombre)
-      `)
+      .select(`*, servicios (nombre, duracion_minutos, precio), profesionales (nombre)`)
       .eq('fecha', fechaStr)
       .order('hora')
 
@@ -21,11 +17,7 @@ export const turnosService = {
   async obtenerTurnosSemana(fechaInicio, fechaFin) {
     const { data, error } = await supabase
       .from('turnos')
-      .select(`
-        *,
-        servicios (nombre, duracion_minutos, precio),
-        profesionales (nombre)
-      `)
+      .select(`*, servicios (nombre, duracion_minutos, precio), profesionales (nombre)`)
       .gte('fecha', format(fechaInicio, 'yyyy-MM-dd'))
       .lte('fecha', format(fechaFin, 'yyyy-MM-dd'))
       .order('fecha')
@@ -38,30 +30,24 @@ export const turnosService = {
   async obtenerHorariosDisponibles(profesionalId, servicioId, fecha) {
     const fechaStr = format(fecha, 'yyyy-MM-dd')
 
-    // Obtener duración del servicio
-    const { data: servicio } = await supabase
-      .from('servicios')
-      .select('duracion_minutos')
-      .eq('id', servicioId)
-      .single()
-
-    // Obtener horario laboral del profesional
-    const { data: horario } = await supabase
-      .from('horarios_profesionales')
-      .select('hora_inicio, hora_fin')
-      .eq('profesional_id', profesionalId)
-      .eq('dia_semana', fecha.getDay())
-      .single()
+    const [{ data: servicio }, { data: horario }, { data: turnosExistentes }] =
+      await Promise.all([
+        supabase.from('servicios').select('duracion_minutos').eq('id', servicioId).single(),
+        supabase
+          .from('horarios_profesionales')
+          .select('hora_inicio, hora_fin')
+          .eq('profesional_id', profesionalId)
+          .eq('dia_semana', fecha.getDay())
+          .single(),
+        supabase
+          .from('turnos')
+          .select('hora, servicios(duracion_minutos)')
+          .eq('profesional_id', profesionalId)
+          .eq('fecha', fechaStr)
+          .not('estado', 'eq', 'cancelado'),
+      ])
 
     if (!horario || !servicio) return []
-
-    // Obtener turnos existentes del profesional ese día
-    const { data: turnosExistentes } = await supabase
-      .from('turnos')
-      .select('hora, servicios(duracion_minutos)')
-      .eq('profesional_id', profesionalId)
-      .eq('fecha', fechaStr)
-      .not('estado', 'eq', 'cancelado')
 
     return calcularHorariosLibres(
       horario.hora_inicio,
@@ -72,30 +58,35 @@ export const turnosService = {
   },
 
   async crearTurno(turnoData) {
-    // Verificar solapamiento antes de insertar
+    const fechaStr = format(turnoData.fecha, 'yyyy-MM-dd')
+
+    // Verificación pre-INSERT (soft check, la DB tiene el hard constraint)
     const { data: solapamiento } = await supabase
       .from('turnos')
       .select('id')
       .eq('profesional_id', turnoData.profesional_id)
-      .eq('fecha', format(turnoData.fecha, 'yyyy-MM-dd'))
+      .eq('fecha', fechaStr)
       .eq('hora', turnoData.hora)
       .not('estado', 'eq', 'cancelado')
 
     if (solapamiento && solapamiento.length > 0) {
-      throw new Error('El horario seleccionado ya no está disponible')
+      throw new Error('Conflicto de horario: el slot ya no está disponible')
     }
 
     const { data, error } = await supabase
       .from('turnos')
-      .insert({
-        ...turnoData,
-        fecha: format(turnoData.fecha, 'yyyy-MM-dd'),
-        estado: 'pendiente',
-      })
+      .insert({ ...turnoData, fecha: fechaStr, estado: 'pendiente' })
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      // Código 23505 = unique_violation (race condition llegó hasta la DB)
+      if (error.code === '23505') {
+        throw new Error('Conflicto de horario: ese slot fue tomado al mismo tiempo')
+      }
+      throw new Error(error.message)
+    }
+
     return data
   },
 
@@ -107,7 +98,7 @@ export const turnosService = {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) throw new Error(error.message)
     return data
   },
 
