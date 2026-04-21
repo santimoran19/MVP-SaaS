@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { addWeeks, subWeeks, startOfWeek, endOfWeek, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -10,8 +11,9 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  DollarSign,
+  LogOut,
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import { Card, CardContent } from '@/components/ui/card'
 import { TarjetaTurno } from '@/components/admin/TarjetaTurno'
 import { CalendarioSemana } from '@/components/admin/CalendarioSemana'
@@ -30,6 +32,12 @@ export function AdminPage() {
   const [vista, setVista] = useState('dashboard')
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date())
   const [semanaActual, setSemanaActual] = useState(new Date())
+  const navigate = useNavigate()
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    navigate('/login', { replace: true })
+  }
 
   const inicioSemana = startOfWeek(semanaActual, { weekStartsOn: 1 })
   const finSemana = endOfWeek(semanaActual, { weekStartsOn: 1 })
@@ -87,9 +95,19 @@ export function AdminPage() {
             <h1 className="font-semibold text-[var(--color-foreground)]">
               {VISTAS.find((v) => v.id === vista)?.label}
             </h1>
-            <span className="text-sm text-[var(--color-muted-foreground)] capitalize">
+            <div className="flex items-center gap-3">
+            <span className="text-sm text-[var(--color-muted-foreground)] capitalize hidden sm:inline">
               {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
             </span>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
+              title="Cerrar sesión"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
+          </div>
           </header>
 
           <div className="px-4 lg:px-8 py-6">
