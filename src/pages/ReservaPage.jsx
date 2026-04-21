@@ -1,21 +1,20 @@
 import { useState } from 'react'
-import { CheckCircle2, ChevronLeft, Scissors } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Scissors } from 'lucide-react'
+import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
+import { BookingStepper } from '@/components/booking/BookingStepper'
 import { PasoServicio } from '@/components/booking/PasoServicio'
 import { PasoProfesional } from '@/components/booking/PasoProfesional'
 import { PasoFechaHora } from '@/components/booking/PasoFechaHora'
 import { PasoConfirmacion } from '@/components/booking/PasoConfirmacion'
 import { useServicios, useProfesionales } from '@/hooks/useServicios'
-import { useHorariosDisponibles } from '@/hooks/useTurnos'
-import { turnosService } from '@/services/turnos'
-import { cn } from '@/lib/utils'
+import { useHorariosDisponibles, useCrearTurno } from '@/hooks/useTurnos'
 
 const PASOS = ['Servicio', 'Profesional', 'Fecha y hora', 'Confirmación']
 
 export function ReservaPage() {
   const [pasoActual, setPasoActual] = useState(0)
   const [reservaCompleta, setReservaCompleta] = useState(null)
-  const [loadingConfirmar, setLoadingConfirmar] = useState(false)
 
   const [servicio, setServicio] = useState(null)
   const [profesional, setProfesional] = useState(null)
@@ -29,6 +28,7 @@ export function ReservaPage() {
     servicio?.id,
     fecha
   )
+  const { crear: crearTurno, loading: loadingConfirmar } = useCrearTurno()
 
   const puedeAvanzar = () => {
     if (pasoActual === 0) return !!servicio
@@ -42,11 +42,10 @@ export function ReservaPage() {
   }
 
   const retroceder = () => {
-    if (pasoActual > 0) {
-      setPasoActual((p) => p - 1)
-      if (pasoActual === 2) { setFecha(null); setHora(null) }
-      if (pasoActual === 1) setProfesional(null)
-    }
+    if (pasoActual === 0) return
+    setPasoActual((p) => p - 1)
+    if (pasoActual === 2) { setFecha(null); setHora(null) }
+    if (pasoActual === 1) setProfesional(null)
   }
 
   const handleFechaChange = (nuevaFecha) => {
@@ -55,78 +54,64 @@ export function ReservaPage() {
   }
 
   const handleConfirmar = async (datos) => {
-    try {
-      setLoadingConfirmar(true)
-      const turno = await turnosService.crearTurno({
-        ...datos,
-        servicio_id: servicio.id,
-        profesional_id: profesional.id,
-        fecha,
-        hora,
-      })
-      setReservaCompleta(turno)
-    } catch (error) {
-      alert(error.message || 'Error al confirmar el turno. Intentá de nuevo.')
-    } finally {
-      setLoadingConfirmar(false)
-    }
+    const turno = await crearTurno({
+      ...datos,
+      servicio_id: servicio.id,
+      profesional_id: profesional.id,
+      fecha,
+      hora,
+    })
+    setReservaCompleta(turno)
   }
 
   if (reservaCompleta) {
-    return <PantallaExito turno={reservaCompleta} servicio={servicio} profesional={profesional} fecha={fecha} hora={hora} />
+    return (
+      <PantallaExito
+        servicio={servicio}
+        profesional={profesional}
+        fecha={fecha}
+        hora={hora}
+      />
+    )
   }
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-[var(--color-border)]">
-        <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-[var(--color-primary)] flex items-center justify-center">
-              <Scissors className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-semibold text-[var(--color-foreground)]">Reservar turno</span>
+        <div className="max-w-xl mx-auto px-4 h-14 flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-[var(--color-primary)] flex items-center justify-center flex-shrink-0">
+            <Scissors className="h-4 w-4 text-white" />
           </div>
+          <span className="font-semibold text-[var(--color-foreground)]">Reservar turno</span>
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        {/* Indicador de pasos */}
-        <div className="flex items-center gap-1">
-          {PASOS.map((paso, i) => (
-            <div key={paso} className="flex items-center gap-1 flex-1">
-              <div className="flex flex-col items-center gap-1 flex-1">
-                <div
-                  className={cn(
-                    'h-1 w-full rounded-full transition-all duration-300',
-                    i <= pasoActual ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'
-                  )}
-                />
-                <span
-                  className={cn(
-                    'text-[10px] font-medium whitespace-nowrap',
-                    i === pasoActual
-                      ? 'text-[var(--color-primary)]'
-                      : i < pasoActual
-                      ? 'text-[var(--color-muted-foreground)]'
-                      : 'text-[var(--color-border)]'
-                  )}
-                >
-                  {paso}
-                </span>
-              </div>
-            </div>
-          ))}
+      <div className="max-w-xl mx-auto px-4 py-6 space-y-6">
+        {/* Stepper */}
+        <BookingStepper pasos={PASOS} pasoActual={pasoActual} />
+
+        {/* Título del paso actual */}
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--color-foreground)]">
+            {PASOS[pasoActual]}
+          </h2>
+          <p className="text-sm text-[var(--color-muted-foreground)] mt-0.5">
+            {pasoActual === 0 && 'Elegí el servicio que querés'}
+            {pasoActual === 1 && 'Elegí con quién querés atenderte'}
+            {pasoActual === 2 && 'Elegí el día y el horario'}
+            {pasoActual === 3 && 'Completá tus datos para confirmar'}
+          </p>
         </div>
 
         {/* Contenido del paso */}
-        <div className="min-h-[400px]">
+        <div className="min-h-[320px]">
           {pasoActual === 0 && (
             <PasoServicio
               servicios={servicios}
               loading={loadingServicios}
               seleccionado={servicio}
-              onSeleccionar={(s) => { setServicio(s); avanzar() }}
+              onSeleccionar={setServicio}
             />
           )}
           {pasoActual === 1 && (
@@ -134,7 +119,7 @@ export function ReservaPage() {
               profesionales={profesionales}
               loading={loadingProfesionales}
               seleccionado={profesional}
-              onSeleccionar={(p) => { setProfesional(p); avanzar() }}
+              onSeleccionar={setProfesional}
             />
           )}
           {pasoActual === 2 && (
@@ -160,29 +145,38 @@ export function ReservaPage() {
         </div>
 
         {/* Navegación */}
-        <div className="flex gap-3 pt-2">
-          {pasoActual > 0 && (
-            <Button variant="outline" onClick={retroceder} className="flex-1">
-              <ChevronLeft className="h-4 w-4" />
-              Volver
-            </Button>
-          )}
-          {pasoActual === 2 && (
+        {pasoActual < 3 && (
+          <div className="flex gap-3 pt-2">
+            {pasoActual > 0 ? (
+              <Button variant="outline" onClick={retroceder} className="flex-none px-4">
+                <ChevronLeft className="h-4 w-4" />
+                Volver
+              </Button>
+            ) : null}
             <Button
               onClick={avanzar}
               disabled={!puedeAvanzar()}
-              className="flex-1"
+              className="flex-1 h-11"
             >
               Continuar
+              <ChevronRight className="h-4 w-4" />
             </Button>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Botón volver en paso 3 (el submit está dentro de PasoConfirmacion) */}
+        {pasoActual === 3 && (
+          <Button variant="outline" onClick={retroceder} className="w-full" disabled={loadingConfirmar}>
+            <ChevronLeft className="h-4 w-4" />
+            Volver
+          </Button>
+        )}
       </div>
     </div>
   )
 }
 
-function PantallaExito({ turno, servicio, profesional, fecha, hora }) {
+function PantallaExito({ servicio, profesional, fecha, hora }) {
   return (
     <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
       <div className="max-w-sm w-full text-center space-y-6">
@@ -202,7 +196,12 @@ function PantallaExito({ turno, servicio, profesional, fecha, hora }) {
           <div className="flex justify-between text-sm">
             <span className="text-[var(--color-muted-foreground)]">Fecha</span>
             <span className="font-medium capitalize">
-              {fecha && new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(fecha)}
+              {fecha &&
+                new Intl.DateTimeFormat('es-AR', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                }).format(fecha)}
             </span>
           </div>
           <div className="flex justify-between text-sm">
