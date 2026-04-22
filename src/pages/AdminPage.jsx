@@ -7,37 +7,43 @@ import {
   CalendarDays,
   LayoutDashboard,
   Scissors,
+  Users,
   TrendingUp,
   Clock,
   CheckCircle2,
   XCircle,
   LogOut,
+  CalendarOff,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent } from '@/components/ui/card'
 import { TarjetaTurno } from '@/components/admin/TarjetaTurno'
 import { CalendarioSemana } from '@/components/admin/CalendarioSemana'
 import { GestionServicios } from '@/components/admin/GestionServicios'
+import { GestionProfesionales } from '@/components/admin/GestionProfesionales'
+import { GestionDisponibilidad } from '@/components/admin/GestionDisponibilidad'
 import { useTurnosDia, useTurnosSemana } from '@/hooks/useTurnos'
-import { useServicios } from '@/hooks/useServicios'
+import { useServicios, useProfesionales } from '@/hooks/useServicios'
 import { cn } from '@/lib/utils'
 
 const VISTAS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'calendario', label: 'Calendario', icon: CalendarDays },
+  { id: 'catalogo', label: 'Catálogo', icon: Scissors },
+  { id: 'disponibilidad', label: 'Disponibilidad', icon: CalendarOff },
+]
+
+const CATALOGO_TABS = [
   { id: 'servicios', label: 'Servicios', icon: Scissors },
+  { id: 'profesionales', label: 'Profesionales', icon: Users },
 ]
 
 export function AdminPage() {
   const [vista, setVista] = useState('dashboard')
+  const [catalogoTab, setCatalogoTab] = useState('servicios')
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date())
   const [semanaActual, setSemanaActual] = useState(new Date())
   const navigate = useNavigate()
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    navigate('/login', { replace: true })
-  }
 
   const inicioSemana = startOfWeek(semanaActual, { weekStartsOn: 1 })
   const finSemana = endOfWeek(semanaActual, { weekStartsOn: 1 })
@@ -45,13 +51,11 @@ export function AdminPage() {
   const { turnos: turnosDia, loading: loadingDia, recargar: recargarDia } = useTurnosDia(fechaSeleccionada)
   const { turnos: turnosSemana } = useTurnosSemana(inicioSemana, finSemana)
   const { servicios, recargar: recargarServicios } = useServicios(false)
+  const { profesionales, recargar: recargarProfesionales } = useProfesionales(false)
 
-  // ── KPIs del día ──────────────────────────────────────
   const turnosPendientes  = turnosDia.filter((t) => t.estado === 'pendiente').length
   const turnosConfirmados = turnosDia.filter((t) => t.estado === 'confirmado').length
   const turnosCancelados  = turnosDia.filter((t) => t.estado === 'cancelado').length
-
-  // Facturación estimada: suma los precios de los turnos confirmados del día
   const facturacionEstimada = turnosDia
     .filter((t) => t.estado === 'confirmado')
     .reduce((acc, t) => acc + (t.servicios?.precio ?? 0), 0)
@@ -59,6 +63,11 @@ export function AdminPage() {
   const handleActualizarTurno = async () => {
     await recargarDia()
     toast.success('Turno actualizado')
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    navigate('/login', { replace: true })
   }
 
   return (
@@ -96,18 +105,18 @@ export function AdminPage() {
               {VISTAS.find((v) => v.id === vista)?.label}
             </h1>
             <div className="flex items-center gap-3">
-            <span className="text-sm text-[var(--color-muted-foreground)] capitalize hidden sm:inline">
-              {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-              title="Cerrar sesión"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Salir</span>
-            </button>
-          </div>
+              <span className="text-sm text-[var(--color-muted-foreground)] capitalize hidden sm:inline">
+                {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
+                title="Cerrar sesión"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Salir</span>
+              </button>
+            </div>
           </header>
 
           <div className="px-4 lg:px-8 py-6">
@@ -121,6 +130,7 @@ export function AdminPage() {
                 cancelados={turnosCancelados}
                 facturacion={facturacionEstimada}
                 onActualizar={handleActualizarTurno}
+                onCambiarFecha={(dia) => setFechaSeleccionada(dia)}
               />
             )}
             {vista === 'calendario' && (
@@ -132,9 +142,17 @@ export function AdminPage() {
                 onDiaSeleccionado={(dia) => { setFechaSeleccionada(dia); setVista('dashboard') }}
               />
             )}
-            {vista === 'servicios' && (
-              <GestionServicios servicios={servicios} onActualizar={recargarServicios} />
+            {vista === 'catalogo' && (
+              <CatalogoVista
+                tab={catalogoTab}
+                onTabChange={setCatalogoTab}
+                servicios={servicios}
+                profesionales={profesionales}
+                onActualizarServicios={recargarServicios}
+                onActualizarProfesionales={recargarProfesionales}
+              />
             )}
+            {vista === 'disponibilidad' && <GestionDisponibilidad />}
           </div>
         </main>
       </div>
@@ -162,47 +180,32 @@ export function AdminPage() {
 // ─────────────────────────────────────────────────────────────
 // Vista Dashboard
 // ─────────────────────────────────────────────────────────────
-function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, confirmados, cancelados, facturacion, onActualizar }) {
+function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, confirmados, cancelados, facturacion, onActualizar, onCambiarFecha }) {
   return (
     <div className="space-y-6 max-w-2xl">
-      {/* KPIs */}
       {loading ? (
         <SkeletonKpis />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <KpiCard
-            label="Pendientes"
-            value={pendientes}
-            icon={<Clock className="h-4 w-4 text-blue-500" />}
-            valueClass="text-blue-600"
-          />
-          <KpiCard
-            label="Confirmados"
-            value={confirmados}
-            icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-            valueClass="text-emerald-600"
-          />
-          <KpiCard
-            label="Cancelados"
-            value={cancelados}
-            icon={<XCircle className="h-4 w-4 text-red-400" />}
-            valueClass="text-red-500"
-          />
-          <KpiCard
-            label="Facturación est."
-            value={`$${facturacion.toLocaleString('es-AR')}`}
-            icon={<TrendingUp className="h-4 w-4 text-violet-500" />}
-            valueClass="text-violet-600"
-            small
-          />
+          <KpiCard label="Pendientes" value={pendientes} icon={<Clock className="h-4 w-4 text-blue-500" />} valueClass="text-blue-600" />
+          <KpiCard label="Confirmados" value={confirmados} icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />} valueClass="text-emerald-600" />
+          <KpiCard label="Cancelados" value={cancelados} icon={<XCircle className="h-4 w-4 text-red-400" />} valueClass="text-red-500" />
+          <KpiCard label="Facturación est." value={`$${facturacion.toLocaleString('es-AR')}`} icon={<TrendingUp className="h-4 w-4 text-violet-500" />} valueClass="text-violet-600" small />
         </div>
       )}
 
-      {/* Lista de turnos del día */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wide">
-          Turnos — {format(fechaSeleccionada, "d 'de' MMMM", { locale: es })}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wide">
+            Turnos — {format(fechaSeleccionada, "d 'de' MMMM", { locale: es })}
+          </h2>
+          <input
+            type="date"
+            value={format(fechaSeleccionada, 'yyyy-MM-dd')}
+            onChange={(e) => onCambiarFecha(new Date(e.target.value + 'T00:00:00'))}
+            className="text-xs border border-[var(--color-border)] rounded-lg px-2 py-1 text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+          />
+        </div>
 
         {loading ? (
           <SkeletonTurnos />
@@ -219,6 +222,40 @@ function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, con
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Vista Catálogo (Servicios + Profesionales con sub-tabs)
+// ─────────────────────────────────────────────────────────────
+function CatalogoVista({ tab, onTabChange, servicios, profesionales, onActualizarServicios, onActualizarProfesionales }) {
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="flex gap-1 bg-[var(--color-secondary)] rounded-lg p-1 w-fit">
+        {CATALOGO_TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => onTabChange(id)}
+            className={cn(
+              'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+              tab === id
+                ? 'bg-white text-[var(--color-foreground)] shadow-sm'
+                : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'servicios' && (
+        <GestionServicios servicios={servicios} onActualizar={onActualizarServicios} />
+      )}
+      {tab === 'profesionales' && (
+        <GestionProfesionales profesionales={profesionales} onActualizar={onActualizarProfesionales} />
+      )}
     </div>
   )
 }
