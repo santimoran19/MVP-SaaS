@@ -45,10 +45,10 @@ export const turnosService = {
       await Promise.all([
         supabase.from('servicios').select('duracion_minutos').eq('id', servicioId).single(),
         supabase
-          .from('horarios_profesionales')
+          .from('configuracion_horarios')
           .select('hora_inicio, hora_fin')
-          .eq('profesional_id', profesionalId)
           .eq('dia_semana', fecha.getDay())
+          .eq('activo', true)
           .single(),
         turnosQuery,
         supabase
@@ -144,6 +144,11 @@ export const turnosService = {
 
   async cancelarTurno(turnoId) {
     return this.actualizarEstado(turnoId, 'cancelado')
+  },
+
+  async eliminarTurno(turnoId) {
+    const { error } = await supabase.from('turnos').delete().eq('id', turnoId)
+    if (error) throw new Error(error.message)
   },
 }
 
