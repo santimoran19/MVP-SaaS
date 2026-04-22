@@ -111,3 +111,16 @@ export const turnoEditSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida'),
   hora: z.string().regex(/^\d{2}:\d{2}$/, 'Seleccioná un horario'),
 })
+
+// ─────────────────────────────────────────────
+// Creación de turno desde admin
+// ─────────────────────────────────────────────
+export const turnoAdminSchema = z.object({
+  nombre: z.string().min(3, 'Mínimo 3 caracteres').max(60, 'Nombre demasiado largo'),
+  whatsapp: z.string().max(20).optional().or(z.literal('')),
+  servicio_id: z.string().uuid('Seleccioná un servicio'),
+  profesional_id: z.string().uuid('Seleccioná un profesional'),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida'),
+  hora: z.string().regex(/^\d{2}:\d{2}$/, 'Seleccioná un horario'),
+  notas: z.string().max(200).optional().or(z.literal('')),
+})
