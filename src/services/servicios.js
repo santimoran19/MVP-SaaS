@@ -30,9 +30,27 @@ export const serviciosService = {
     return data
   },
 
-  async eliminar(id) {
-    const { error } = await supabase.from('servicios').delete().eq('id', id)
+  // Soft delete — mantiene el historial de turnos asociados
+  async desactivar(id) {
+    const { data, error } = await supabase
+      .from('servicios')
+      .update({ activo: false })
+      .eq('id', id)
+      .select()
+      .single()
     if (error) throw error
+    return data
+  },
+
+  async activar(id) {
+    const { data, error } = await supabase
+      .from('servicios')
+      .update({ activo: true })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
   },
 }
 
@@ -59,6 +77,28 @@ export const profesionalesService = {
     const { data, error } = await supabase
       .from('profesionales')
       .update(profesional)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async desactivar(id) {
+    const { data, error } = await supabase
+      .from('profesionales')
+      .update({ activo: false })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async activar(id) {
+    const { data, error } = await supabase
+      .from('profesionales')
+      .update({ activo: true })
       .eq('id', id)
       .select()
       .single()
