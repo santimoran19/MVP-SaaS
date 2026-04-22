@@ -49,13 +49,13 @@ export function CalendarioSemana({ turnos, semanaActual, onSemanaAnterior, onSem
   )
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-white overflow-hidden">
+    <div className="rounded-xl border border-[var(--color-border)] bg-white overflow-hidden max-w-4xl w-full">
       <NavHeader />
 
       {/* ═══════════════════════════════════════
           VISTA MOBILE — selector de día + lista
           ═══════════════════════════════════════ */}
-      <div className="md:hidden">
+      <div className="lg:hidden">
         {/* Selector de días */}
         <div className="flex border-b border-[var(--color-border)] overflow-x-auto">
           {diasSemana.map((dia) => {
@@ -141,7 +141,8 @@ export function CalendarioSemana({ turnos, semanaActual, onSemanaAnterior, onSem
       {/* ═══════════════════════════════════════
           VISTA DESKTOP — grilla semanal
           ═══════════════════════════════════════ */}
-      <div className="hidden md:block">
+      <div className="hidden lg:block overflow-x-auto">
+        <div className="min-w-[640px]">
         {/* Cabecera de días */}
         <div className="grid grid-cols-7 border-b border-[var(--color-border)]">
           {diasSemana.map((dia) => {
@@ -217,6 +218,7 @@ export function CalendarioSemana({ turnos, semanaActual, onSemanaAnterior, onSem
               })}
             </div>
           ))}
+        </div>
         </div>
       </div>
     </div>

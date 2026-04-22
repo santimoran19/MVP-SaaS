@@ -2,26 +2,27 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { addWeeks, subWeeks, startOfWeek, endOfWeek, format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { toast } from 'sonner'
 import {
   CalendarDays,
   LayoutDashboard,
   Scissors,
-  Users,
   TrendingUp,
   Clock,
   CheckCircle2,
   XCircle,
   LogOut,
   CalendarOff,
+  Plus,
+  AlarmClock,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { Card, CardContent } from '@/components/ui/card'
 import { TarjetaTurno } from '@/components/admin/TarjetaTurno'
 import { CalendarioSemana } from '@/components/admin/CalendarioSemana'
 import { GestionServicios } from '@/components/admin/GestionServicios'
 import { GestionProfesionales } from '@/components/admin/GestionProfesionales'
 import { GestionDisponibilidad } from '@/components/admin/GestionDisponibilidad'
+import { GestionHorarios } from '@/components/admin/GestionHorarios'
+import { ModalCrearTurno } from '@/components/admin/ModalCrearTurno'
 import { useTurnosDia, useTurnosSemana } from '@/hooks/useTurnos'
 import { useServicios, useProfesionales } from '@/hooks/useServicios'
 import { cn } from '@/lib/utils'
@@ -30,12 +31,13 @@ const VISTAS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'calendario', label: 'Calendario', icon: CalendarDays },
   { id: 'catalogo', label: 'Catálogo', icon: Scissors },
-  { id: 'disponibilidad', label: 'Disponibilidad', icon: CalendarOff },
+  { id: 'horarios', label: 'Horarios', icon: AlarmClock },
+  { id: 'disponibilidad', label: 'Bloqueos', icon: CalendarOff },
 ]
 
 const CATALOGO_TABS = [
   { id: 'servicios', label: 'Servicios', icon: Scissors },
-  { id: 'profesionales', label: 'Profesionales', icon: Users },
+  { id: 'profesionales', label: 'Profesionales', icon: LayoutDashboard },
 ]
 
 export function AdminPage() {
@@ -60,10 +62,7 @@ export function AdminPage() {
     .filter((t) => t.estado === 'confirmado')
     .reduce((acc, t) => acc + (t.servicios?.precio ?? 0), 0)
 
-  const handleActualizarTurno = async () => {
-    await recargarDia()
-    toast.success('Turno actualizado')
-  }
+  const handleActualizarTurno = async () => { await recargarDia() }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -71,55 +70,70 @@ export function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
-      <div className="flex">
-        {/* ── Sidebar desktop ── */}
-        <aside className="hidden lg:flex flex-col w-56 min-h-screen border-r border-[var(--color-border)] bg-white p-4 gap-1 fixed">
-          <div className="flex items-center gap-2 px-2 py-3 mb-4">
-            <div className="h-8 w-8 rounded-lg bg-[var(--color-primary)] flex items-center justify-center">
-              <Scissors className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-bold text-[var(--color-foreground)]">TurnoApp</span>
+    <div className="h-screen overflow-hidden flex bg-[var(--color-background)]">
+
+      {/* ── Sidebar desktop ── */}
+      <aside className="hidden lg:flex flex-col w-56 border-r border-[var(--color-border)] bg-white flex-shrink-0">
+        <div className="flex items-center gap-2 px-4 py-4 border-b border-[var(--color-border)]">
+          <div className="h-8 w-8 rounded-lg bg-[var(--color-primary)] flex items-center justify-center flex-shrink-0">
+            <Scissors className="h-4 w-4 text-white" />
           </div>
+          <span className="font-bold text-[var(--color-foreground)]">TurnoApp</span>
+        </div>
+
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {VISTAS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setVista(id)}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left',
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left',
                 vista === id
                   ? 'bg-blue-50 text-[var(--color-primary)]'
                   : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-secondary)] hover:text-[var(--color-foreground)]'
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 flex-shrink-0" />
               {label}
             </button>
           ))}
-        </aside>
+        </nav>
 
-        {/* ── Contenido principal ── */}
-        <main className="flex-1 lg:ml-56 pb-20 lg:pb-0">
-          <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-[var(--color-border)] px-4 lg:px-8 h-14 flex items-center justify-between">
-            <h1 className="font-semibold text-[var(--color-foreground)]">
-              {VISTAS.find((v) => v.id === vista)?.label}
-            </h1>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-[var(--color-muted-foreground)] capitalize hidden sm:inline">
-                {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-                title="Cerrar sesión"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Salir</span>
-              </button>
-            </div>
-          </header>
+        <div className="p-3 border-t border-[var(--color-border)]">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-secondary)] hover:text-[var(--color-foreground)] transition-colors"
+          >
+            <LogOut className="h-4 w-4 flex-shrink-0" />
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
 
-          <div className="px-4 lg:px-8 py-6">
+      {/* ── Columna principal ── */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Header fijo */}
+        <header className="flex-shrink-0 bg-white/90 backdrop-blur-sm border-b border-[var(--color-border)] px-4 lg:px-8 h-14 flex items-center justify-between z-10">
+          <h1 className="font-semibold text-[var(--color-foreground)]">
+            {VISTAS.find((v) => v.id === vista)?.label}
+          </h1>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-[var(--color-muted-foreground)] capitalize hidden sm:inline">
+              {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="lg:hidden flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
+              title="Cerrar sesión"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* Contenido con scroll interno */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="px-4 lg:px-8 py-5 pb-24 lg:pb-8">
             {vista === 'dashboard' && (
               <DashboardVista
                 turnosDia={turnosDia}
@@ -131,6 +145,7 @@ export function AdminPage() {
                 facturacion={facturacionEstimada}
                 onActualizar={handleActualizarTurno}
                 onCambiarFecha={(dia) => setFechaSeleccionada(dia)}
+                onRecargar={recargarDia}
               />
             )}
             {vista === 'calendario' && (
@@ -152,6 +167,7 @@ export function AdminPage() {
                 onActualizarProfesionales={recargarProfesionales}
               />
             )}
+            {vista === 'horarios' && <GestionHorarios />}
             {vista === 'disponibilidad' && <GestionDisponibilidad />}
           </div>
         </main>
@@ -164,7 +180,7 @@ export function AdminPage() {
             key={id}
             onClick={() => setVista(id)}
             className={cn(
-              'flex-1 flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors',
+              'flex-1 flex flex-col items-center gap-0.5 py-2 text-[9px] font-medium transition-colors',
               vista === id ? 'text-[var(--color-primary)]' : 'text-[var(--color-muted-foreground)]'
             )}
           >
@@ -180,21 +196,36 @@ export function AdminPage() {
 // ─────────────────────────────────────────────────────────────
 // Vista Dashboard
 // ─────────────────────────────────────────────────────────────
-function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, confirmados, cancelados, facturacion, onActualizar, onCambiarFecha }) {
+function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, confirmados, cancelados, facturacion, onActualizar, onCambiarFecha, onRecargar }) {
+  const [modalCrear, setModalCrear] = useState(false)
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-4 max-w-2xl">
+      {/* KPIs compactos */}
       {loading ? (
-        <SkeletonKpis />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-14 rounded-xl bg-gray-100 animate-pulse" />
+          ))}
+        </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <KpiCard label="Pendientes" value={pendientes} icon={<Clock className="h-4 w-4 text-blue-500" />} valueClass="text-blue-600" />
-          <KpiCard label="Confirmados" value={confirmados} icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />} valueClass="text-emerald-600" />
-          <KpiCard label="Cancelados" value={cancelados} icon={<XCircle className="h-4 w-4 text-red-400" />} valueClass="text-red-500" />
-          <KpiCard label="Facturación est." value={`$${facturacion.toLocaleString('es-AR')}`} icon={<TrendingUp className="h-4 w-4 text-violet-500" />} valueClass="text-violet-600" small />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <StatMini label="Pendientes"   value={pendientes}   icon={Clock}        iconClass="text-blue-400"   valueClass="text-blue-600" />
+          <StatMini label="Confirmados"  value={confirmados}  icon={CheckCircle2} iconClass="text-emerald-400" valueClass="text-emerald-600" />
+          <StatMini label="Cancelados"   value={cancelados}   icon={XCircle}      iconClass="text-red-400"   valueClass="text-red-500" />
+          <StatMini
+            label="Facturación"
+            value={`$${facturacion.toLocaleString('es-AR')}`}
+            icon={TrendingUp}
+            iconClass="text-violet-400"
+            valueClass="text-violet-600"
+            small
+          />
         </div>
       )}
 
-      <div className="space-y-3">
+      {/* Lista de turnos del día */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wide">
             Turnos — {format(fechaSeleccionada, "d 'de' MMMM", { locale: es })}
@@ -222,12 +253,27 @@ function DashboardVista({ turnosDia, loading, fechaSeleccionada, pendientes, con
           </div>
         )}
       </div>
+
+      {/* FAB */}
+      <button
+        onClick={() => setModalCrear(true)}
+        title="Nuevo turno"
+        className="fixed bottom-24 right-5 lg:bottom-8 lg:right-8 h-14 w-14 rounded-full bg-[var(--color-primary)] text-white shadow-lg hover:shadow-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-30"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      <ModalCrearTurno
+        open={modalCrear}
+        onOpenChange={setModalCrear}
+        onCreado={onRecargar}
+      />
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────
-// Vista Catálogo (Servicios + Profesionales con sub-tabs)
+// Vista Catálogo
 // ─────────────────────────────────────────────────────────────
 function CatalogoVista({ tab, onTabChange, servicios, profesionales, onActualizarServicios, onActualizarProfesionales }) {
   return (
@@ -261,33 +307,20 @@ function CatalogoVista({ tab, onTabChange, servicios, profesionales, onActualiza
 }
 
 // ─────────────────────────────────────────────────────────────
-// Componentes auxiliares
+// Auxiliares
 // ─────────────────────────────────────────────────────────────
-function KpiCard({ label, value, icon, valueClass, small = false }) {
+function StatMini({ label, value, icon: Icon, iconClass, valueClass, small = false }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-1.5 mb-2">
-          {icon}
-          <span className="text-xs text-[var(--color-muted-foreground)] leading-tight">{label}</span>
-        </div>
-        <span className={cn('font-bold leading-none', small ? 'text-lg' : 'text-2xl', valueClass)}>
+    <div className="p-3 rounded-xl border border-[var(--color-border)] bg-white flex items-center gap-2.5">
+      <Icon className={cn('h-4 w-4 flex-shrink-0', iconClass)} />
+      <div className="min-w-0">
+        <p className="text-[10px] text-[var(--color-muted-foreground)] uppercase tracking-wide leading-none truncate">
+          {label}
+        </p>
+        <p className={cn('font-bold leading-tight mt-1', small ? 'text-base' : 'text-xl', valueClass)}>
           {value}
-        </span>
-      </CardContent>
-    </Card>
-  )
-}
-
-function SkeletonKpis() {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="rounded-xl border border-[var(--color-border)] p-4 space-y-2">
-          <div className="h-3 w-20 rounded bg-gray-100 animate-pulse" />
-          <div className="h-7 w-12 rounded bg-gray-100 animate-pulse" />
-        </div>
-      ))}
+        </p>
+      </div>
     </div>
   )
 }
@@ -296,15 +329,14 @@ function SkeletonTurnos() {
   return (
     <div className="space-y-2">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="rounded-xl border border-[var(--color-border)] p-4 flex gap-4">
-          <div className="flex flex-col gap-1">
-            <div className="h-5 w-10 rounded bg-gray-100 animate-pulse" />
-            <div className="h-3 w-6 rounded bg-gray-100 animate-pulse" />
+        <div key={i} className="rounded-xl border border-[var(--color-border)] p-3 flex gap-3">
+          <div className="w-10 space-y-1">
+            <div className="h-4 w-8 rounded bg-gray-100 animate-pulse" />
+            <div className="h-3 w-4 rounded bg-gray-100 animate-pulse" />
           </div>
           <div className="flex-1 space-y-2">
             <div className="h-4 w-32 rounded bg-gray-100 animate-pulse" />
             <div className="h-3 w-48 rounded bg-gray-100 animate-pulse" />
-            <div className="h-3 w-24 rounded bg-gray-100 animate-pulse" />
           </div>
         </div>
       ))}

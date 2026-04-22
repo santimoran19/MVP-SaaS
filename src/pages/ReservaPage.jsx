@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { CheckCircle2, ChevronLeft, ChevronRight, Scissors } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { CheckCircle2, ChevronLeft, ChevronRight, Scissors, Plus, Home } from 'lucide-react'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { BookingStepper } from '@/components/booking/BookingStepper'
@@ -64,6 +65,15 @@ export function ReservaPage() {
     setReservaCompleta(turno)
   }
 
+  const resetReserva = () => {
+    setReservaCompleta(null)
+    setPasoActual(0)
+    setServicio(null)
+    setProfesional(null)
+    setFecha(null)
+    setHora(null)
+  }
+
   if (reservaCompleta) {
     return (
       <PantallaExito
@@ -71,6 +81,7 @@ export function ReservaPage() {
         profesional={profesional}
         fecha={fecha}
         hora={hora}
+        onNuevaTurno={resetReserva}
       />
     )
   }
@@ -79,7 +90,7 @@ export function ReservaPage() {
     <div className="min-h-screen bg-[var(--color-background)]">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-[var(--color-border)]">
-        <div className="max-w-xl mx-auto px-4 h-14 flex items-center gap-3">
+        <div className="max-w-screen-xl mx-auto px-4 h-14 flex items-center gap-3">
           <div className="h-8 w-8 rounded-lg bg-[var(--color-primary)] flex items-center justify-center flex-shrink-0">
             <Scissors className="h-4 w-4 text-white" />
           </div>
@@ -87,7 +98,8 @@ export function ReservaPage() {
         </div>
       </header>
 
-      <div className="max-w-xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-screen-xl mx-auto px-4 py-6 flex justify-center">
+      <div className="w-full max-w-xl space-y-6">
         {/* Stepper */}
         <BookingStepper pasos={PASOS} pasoActual={pasoActual} />
 
@@ -172,9 +184,10 @@ export function ReservaPage() {
           </Button>
         )}
       </div>
+      </div>
 
       {/* Footer */}
-      <footer className="max-w-xl mx-auto px-4 py-6 flex justify-center">
+      <footer className="max-w-screen-xl mx-auto px-4 py-6 flex justify-center">
         <a
           href="/login"
           className="text-xs text-[var(--color-border)] hover:text-[var(--color-muted-foreground)] transition-colors"
@@ -186,43 +199,90 @@ export function ReservaPage() {
   )
 }
 
-function PantallaExito({ servicio, profesional, fecha, hora }) {
+function PantallaExito({ servicio, profesional, fecha, hora, onNuevaTurno }) {
+  const navigate = useNavigate()
+
   return (
     <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
-      <div className="max-w-sm w-full text-center space-y-6">
+      <div className="max-w-sm w-full space-y-4">
+        {/* Icono de éxito */}
         <div className="flex justify-center">
-          <div className="h-20 w-20 rounded-full bg-emerald-100 flex items-center justify-center">
-            <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+          <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center">
+            <CheckCircle2 className="h-8 w-8 text-emerald-600" />
           </div>
         </div>
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold text-[var(--color-foreground)]">¡Turno confirmado!</h1>
-          <p className="text-[var(--color-muted-foreground)]">
-            Te esperamos para tu turno de <strong>{servicio?.nombre}</strong> con{' '}
-            <strong>{profesional?.nombre}</strong>
+
+        {/* Título */}
+        <div className="text-center space-y-1">
+          <h1 className="text-xl font-bold text-[var(--color-foreground)]">¡Turno confirmado!</h1>
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            Guardá estos datos para recordar tu cita
           </p>
         </div>
-        <div className="rounded-xl bg-[var(--color-secondary)] p-4 text-left space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-[var(--color-muted-foreground)]">Fecha</span>
-            <span className="font-medium capitalize">
+
+        {/* Ticket */}
+        <div className="bg-white rounded-2xl border border-[var(--color-border)] overflow-hidden shadow-sm">
+          {/* Header del ticket */}
+          <div className="bg-[var(--color-primary)] px-5 py-4 text-white text-center">
+            <p className="text-xs font-medium uppercase tracking-widest opacity-80">Reserva confirmada</p>
+            <p className="text-2xl font-bold mt-1">{hora} hs</p>
+            <p className="text-sm opacity-90 capitalize mt-0.5">
               {fecha &&
                 new Intl.DateTimeFormat('es-AR', {
                   weekday: 'long',
                   day: 'numeric',
                   month: 'long',
                 }).format(fecha)}
-            </span>
+            </p>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-[var(--color-muted-foreground)]">Hora</span>
-            <span className="font-medium">{hora} hs</span>
+
+          {/* Borde de ticket perforado */}
+          <div className="flex items-center px-2">
+            <div className="h-4 w-4 rounded-full bg-[var(--color-background)] -ml-4 flex-shrink-0" />
+            <div className="flex-1 border-t-2 border-dashed border-[var(--color-border)]" />
+            <div className="h-4 w-4 rounded-full bg-[var(--color-background)] -mr-4 flex-shrink-0" />
+          </div>
+
+          {/* Detalles */}
+          <div className="px-5 py-4 space-y-3">
+            <TicketRow label="Servicio" value={servicio?.nombre} />
+            <TicketRow label="Con" value={profesional?.nombre} />
+            {servicio?.precio > 0 && (
+              <TicketRow
+                label="Precio"
+                value={`$${servicio.precio.toLocaleString('es-AR')}`}
+                highlight
+              />
+            )}
           </div>
         </div>
-        <p className="text-sm text-[var(--color-muted-foreground)]">
-          Si necesitás cancelar o modificar el turno, contactanos por WhatsApp.
+
+        <p className="text-xs text-center text-[var(--color-muted-foreground)]">
+          Para cancelar o modificar, contactanos por WhatsApp.
         </p>
+
+        {/* Acciones */}
+        <div className="flex flex-col gap-2.5">
+          <Button onClick={onNuevaTurno} className="h-12 text-sm font-semibold w-full">
+            <Plus className="h-4 w-4" />
+            Pedir otro turno
+          </Button>
+        </div>
       </div>
+    </div>
+  )
+}
+
+function TicketRow({ label, value, highlight = false }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs text-[var(--color-muted-foreground)]">{label}</span>
+      <span className={highlight
+        ? 'text-sm font-bold text-[var(--color-primary)]'
+        : 'text-sm font-medium text-[var(--color-foreground)] text-right'
+      }>
+        {value}
+      </span>
     </div>
   )
 }
