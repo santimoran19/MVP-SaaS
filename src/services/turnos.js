@@ -27,10 +27,21 @@ export const turnosService = {
     return data
   },
 
-  async obtenerHorariosDisponibles(profesionalId, servicioId, fecha) {
+  async obtenerHorariosDisponibles(profesionalId, servicioId, fecha, excludeTurnoId = null) {
     const fechaStr = format(fecha, 'yyyy-MM-dd')
 
-    const [{ data: servicio }, { data: horario }, { data: turnosExistentes }] =
+    let turnosQuery = supabase
+      .from('turnos')
+      .select('hora, servicios(duracion_minutos)')
+      .eq('profesional_id', profesionalId)
+      .eq('fecha', fechaStr)
+      .not('estado', 'eq', 'cancelado')
+
+    if (excludeTurnoId) {
+      turnosQuery = turnosQuery.not('id', 'eq', excludeTurnoId)
+    }
+
+    const [{ data: servicio }, { data: horario }, { data: turnosExistentes }, { data: bloqueos }] =
       await Promise.all([
         supabase.from('servicios').select('duracion_minutos').eq('id', servicioId).single(),
         supabase
@@ -39,12 +50,12 @@ export const turnosService = {
           .eq('profesional_id', profesionalId)
           .eq('dia_semana', fecha.getDay())
           .single(),
+        turnosQuery,
         supabase
-          .from('turnos')
-          .select('hora, servicios(duracion_minutos)')
+          .from('bloqueos_horarios')
+          .select('hora_inicio, hora_fin')
           .eq('profesional_id', profesionalId)
-          .eq('fecha', fechaStr)
-          .not('estado', 'eq', 'cancelado'),
+          .eq('fecha', fechaStr),
       ])
 
     if (!horario || !servicio) return []
@@ -53,14 +64,14 @@ export const turnosService = {
       horario.hora_inicio,
       horario.hora_fin,
       turnosExistentes || [],
-      servicio.duracion_minutos
+      servicio.duracion_minutos,
+      bloqueos || []
     )
   },
 
   async crearTurno(turnoData) {
     const fechaStr = format(turnoData.fecha, 'yyyy-MM-dd')
 
-    // Verificación pre-INSERT (soft check, la DB tiene el hard constraint)
     const { data: solapamiento } = await supabase
       .from('turnos')
       .select('id')
@@ -80,13 +91,42 @@ export const turnosService = {
       .single()
 
     if (error) {
-      // Código 23505 = unique_violation (race condition llegó hasta la DB)
       if (error.code === '23505') {
         throw new Error('Conflicto de horario: ese slot fue tomado al mismo tiempo')
       }
       throw new Error(error.message)
     }
 
+    return data
+  },
+
+  async moverTurno(turnoId, { profesional_id, fecha, hora }) {
+    const fechaStr = typeof fecha === 'string' ? fecha : format(fecha, 'yyyy-MM-dd')
+
+    const { data: solapamiento } = await supabase
+      .from('turnos')
+      .select('id')
+      .eq('profesional_id', profesional_id)
+      .eq('fecha', fechaStr)
+      .eq('hora', hora)
+      .not('estado', 'eq', 'cancelado')
+      .not('id', 'eq', turnoId)
+
+    if (solapamiento && solapamiento.length > 0) {
+      throw new Error('Ese horario ya está ocupado por otro turno')
+    }
+
+    const { data, error } = await supabase
+      .from('turnos')
+      .update({ profesional_id, fecha: fechaStr, hora })
+      .eq('id', turnoId)
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === '23505') throw new Error('Conflicto de horario al guardar el cambio')
+      throw new Error(error.message)
+    }
     return data
   },
 
@@ -107,25 +147,31 @@ export const turnosService = {
   },
 }
 
-function calcularHorariosLibres(horaInicio, horaFin, turnosExistentes, duracionMinutos) {
+function calcularHorariosLibres(horaInicio, horaFin, turnosExistentes, duracionMinutos, bloqueos = []) {
   const slots = []
   let [h, m] = horaInicio.split(':').map(Number)
   const [hFin, mFin] = horaFin.split(':').map(Number)
   const minutosFinales = hFin * 60 + mFin
 
   while (h * 60 + m + duracionMinutos <= minutosFinales) {
+    const inicioSlot = h * 60 + m
+    const finSlot = inicioSlot + duracionMinutos
     const horaSlot = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 
     const ocupado = turnosExistentes.some((turno) => {
       const [th, tm] = turno.hora.split(':').map(Number)
       const inicioTurno = th * 60 + tm
       const finTurno = inicioTurno + (turno.servicios?.duracion_minutos || 30)
-      const inicioSlot = h * 60 + m
-      const finSlot = inicioSlot + duracionMinutos
       return inicioSlot < finTurno && finSlot > inicioTurno
     })
 
-    if (!ocupado) slots.push(horaSlot)
+    const bloqueado = bloqueos.some((b) => {
+      const [bIh, bIm] = b.hora_inicio.split(':').map(Number)
+      const [bFh, bFm] = b.hora_fin.split(':').map(Number)
+      return inicioSlot < bFh * 60 + bFm && finSlot > bIh * 60 + bIm
+    })
+
+    if (!ocupado && !bloqueado) slots.push(horaSlot)
 
     m += duracionMinutos
     if (m >= 60) {

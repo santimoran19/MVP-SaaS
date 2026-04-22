@@ -69,7 +69,7 @@ export const servicioSchema = z.object({
   duracion_minutos: z
     .number({ invalid_type_error: 'Ingresá un número' })
     .int()
-    .min(15, 'Mínimo 15 minutos')
+    .min(10, 'Mínimo 10 minutos')
     .max(480, 'Máximo 8 horas'),
   precio: z
     .number({ invalid_type_error: 'Ingresá un precio' })
@@ -85,4 +85,29 @@ export const profesionalSchema = z.object({
     .max(80),
   especialidad: z.string().max(100).optional().or(z.literal('')),
   activo: z.boolean().default(true),
+})
+
+// ─────────────────────────────────────────────
+// Bloqueo de disponibilidad (horario bloqueado)
+// ─────────────────────────────────────────────
+export const bloqueoSchema = z
+  .object({
+    profesional_id: z.string().uuid('Seleccioná un profesional'),
+    fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida'),
+    hora_inicio: z.string().regex(/^\d{2}:\d{2}$/, 'Hora inválida'),
+    hora_fin: z.string().regex(/^\d{2}:\d{2}$/, 'Hora inválida'),
+    motivo: z.string().max(100).optional().or(z.literal('')),
+  })
+  .refine((d) => d.hora_inicio < d.hora_fin, {
+    message: 'La hora de fin debe ser mayor a la de inicio',
+    path: ['hora_fin'],
+  })
+
+// ─────────────────────────────────────────────
+// Edición de turno (cambio de profesional/hora)
+// ─────────────────────────────────────────────
+export const turnoEditSchema = z.object({
+  profesional_id: z.string().uuid('Seleccioná un profesional'),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida'),
+  hora: z.string().regex(/^\d{2}:\d{2}$/, 'Seleccioná un horario'),
 })
